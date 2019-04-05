@@ -47,45 +47,6 @@ class Timer {
 };
 
 
-void setup() {
-  Serial.begin(9600);          
-  delay(10);
-  Serial.println("\r\n");
-  startWiFi();                   
-  startUDP();
-
-  //for(int i=0; i<10; i++)
-  //  timers();
-
-  if(!WiFi.hostByName(NTPServerName, timeServerIP)) { 
-    Serial.println("DNS lookup failed. Rebooting.");
-    Serial.flush();
-    ESP.reset();
-  }
-
-  Serial.println(timeServerIP);
-  Serial.println("\r\nSending NTP request ...");
-  sendNTPpacket(timeServerIP);  
-
-
-  // define PIN Modes
-  pinMode(D0, OUTPUT);
-  
-  // register handlers
-  server.on("/toggle", toggle);
-  server.on("/timers", timers);
-  server.on("/sensors", readSensors);
- 
-  // Start the server
-  server.begin();
-  Serial.println("Server started");
-
-    // Print the IP address
-  Serial.print("Use this URL to connect: ");
-  Serial.print("http://");
-  Serial.print(WiFi.localIP());
-}
-
 // ------- SENSORS -------------
 
 float getTemp(){
@@ -241,4 +202,46 @@ void startUDP() {
   Serial.print("Local port:\t");
   Serial.println(UDP.localPort());
   Serial.println();
+}
+
+// -- setup and main loop
+
+
+void setup() {
+  Serial.begin(9600);          
+  delay(10);
+  Serial.println("\r\n");
+  startWiFi();                   
+  startUDP();
+
+  //for(int i=0; i<10; i++)
+  //  timers();
+
+  if(!WiFi.hostByName(NTPServerName, timeServerIP)) { 
+    Serial.println("DNS lookup failed. Rebooting.");
+    Serial.flush();
+    ESP.reset();
+  }
+
+  Serial.println(timeServerIP);
+  Serial.println("\r\nSending NTP request ...");
+  sendNTPpacket(timeServerIP);  
+
+
+  // define PIN Modes
+  pinMode(D0, OUTPUT);
+  
+  // register handlers
+  server.on("/toggle", toggle);
+  server.on("/timers", timers);
+  server.on("/sensors", readSensors);
+ 
+  // Start the server
+  server.begin();
+  Serial.println("Server started");
+
+    // Print the IP address
+  Serial.print("Use this URL to connect: ");
+  Serial.print("http://");
+  Serial.print(WiFi.localIP());
 }
