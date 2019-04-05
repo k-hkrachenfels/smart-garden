@@ -24,6 +24,7 @@ unsigned long prevNTP = 0;
 unsigned long lastNTPResponse = millis();
 uint32_t timeUNIX = 0;
 unsigned long prevActualTime = 0;
+unsigned long lastCallbackActivationTime = 0;
 
 #define STATE_INACTIVE 0
 #define STATE_ACTIVE 1
@@ -45,7 +46,7 @@ class Timer {
     {
     };   
 };
-
+LinkedList<Timer*> *timerList;
 
 // ------- SENSORS -------------
 
@@ -79,18 +80,16 @@ void readSensors(){
   server.send(200,"text/json",output);
 }
 
-void timers(){
+LinkedList<Timer*>* initTimers(){
     Timer *t1 = new Timer(10, 0, 10, 10, 0);
     Timer *t2 = new Timer(11, 0, 11, 10, 1);
-    //Timer *t3 = new Timer(12, 0, 12, 10, 2);
-    //Timer *t4 = new Timer(13, 0, 13, 10, 0);
-    //Timer *t5 = new Timer(14, 0, 14, 10, 1);
     LinkedList<Timer*>* timerList =  new LinkedList<Timer*>();
     timerList->add(t1);
     timerList->add(t2);
-    //timerList->add(t3);
-    //timerList->add(t4);
-    //timerList->add(t5);
+    return timerList;
+}
+void timers(){
+
     DynamicJsonDocument doc(1024);
     JsonObject root = doc.to<JsonObject>();
     JsonArray timers = root.createNestedArray("timers");
@@ -104,9 +103,6 @@ void timers(){
       timer["relais_num"] = t->relais_num;
     }
     serializeJsonPretty(doc,Serial); 
-    delete(timerList);
-    delete(t1);
-    delete(t2);
     String output;
     serializeJsonPretty(doc, output);
     Serial.println();
@@ -173,11 +169,6 @@ uint32_t updateTimes(){
   return actualTime;
 }
 
-void loop() {
-  uint32_t acutal_time = updateTimes();
-  
-  server.handleClient();
-}
 
 // LAN AND NETWORKING
 
@@ -204,13 +195,36 @@ void startUDP() {
   Serial.println();
 }
 
+// -- callbacks --
+
+void triggerCallbacks( uint32_t actualTime ){
+    if(actualTime - lastCallbackActivationTime < 10)
+      return;
+    int actualHour = getHours(actualTime);
+    int actualMinute =getMinutes(actualTime);
+        Serial.print(actualHour);
+    Serial.print(":");
+    Serial.println(actualMinute);
+
+  for(int i=0; i<timerList->size(); i++){
+    Timer *timer=timerList->get(i);
+    Serial.print(i);
+    Serial.print(". ");
+    Serial.print(timer->start_hour);
+    Serial.print(":");
+    Serial.println(timer->start_minute);
+  }
+}
+
 // -- setup and main loop
 
-
 void setup() {
+  
   Serial.begin(9600);          
   delay(10);
   Serial.println("\r\n");
+
+  timerList = initTimers();
   startWiFi();                   
   startUDP();
 
@@ -244,4 +258,11 @@ void setup() {
   Serial.print("Use this URL to connect: ");
   Serial.print("http://");
   Serial.print(WiFi.localIP());
+}
+
+
+void loop() {
+  uint32_t actual_time = updateTimes();
+  triggerCallbacks(actual_time);
+  server.handleClient();
 }
