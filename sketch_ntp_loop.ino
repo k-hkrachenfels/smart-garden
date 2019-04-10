@@ -92,7 +92,7 @@ class Condition1{
     }
 };
 
-LinkedList<Condition*> *conditionList;
+//Condition conditions[] = {};
 
 // ------- SENSORS -------------
 
@@ -244,17 +244,26 @@ uint32_t updateTimes(){
 
 void startWiFi() { 
   wifiMulti.addAP("dlink-4DA8", "31415926089612867501764661889901764662708917072004000000000");   
+  WiFi.hostname("ESP2"); // TODO - table with mac addresses and host-names here to get
+                         // static ip addresses
   Serial.println("Connecting");
   while (wifiMulti.run() != WL_CONNECTED) {  
     delay(250);
     Serial.print('.');
   }
+  
+  WiFi.hostname("ESP2"); // TODO - table with mac addresses and host-names here to get
+                         // static ip addresses
+  
   Serial.println("\r\n");
   Serial.print("Connected to ");
-  Serial.println(WiFi.SSID());             
+  Serial.println(WiFi.SSID());   
+            
   Serial.print("IP address:\t");
   Serial.print(WiFi.localIP());           
   Serial.println("\r\n");
+  
+
 }
 
 void startUDP() {
