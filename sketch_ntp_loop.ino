@@ -4,14 +4,16 @@
 #include <WiFiUdp.h>
 #include <ArduinoJson.h>
 #include <LinkedList.h>
+#include <DHT.h>
 
 ESP8266WebServer server(80);
 int ledPin0 = D0;   // D0
 int ledPin1 = D1;  // D1
-bool ledState0 = LOW;
-bool ledState1 = LOW;
-const int sensorPin = A0; //14
-const int humidityPin = 15;  // find include file for A1 for NodeMCU board#
+bool ledState0 = LOW; //HIGH; // ventil geschlossen
+bool ledState1 = LOW; //HIGH;
+const int humidityPin = A0; //14
+//const int A1PIN = 15;  // find include file for A1 for NodeMCU board
+DHT dht(D2,DHT11);
 
 ESP8266WiFiMulti wifiMulti;      
 WiFiUDP UDP;                     
@@ -96,12 +98,13 @@ class Condition1{
 
 // ------- SENSORS -------------
 
-float getTemp(){
-  int sensorVal = analogRead(sensorPin);
-  float voltage = (sensorVal / 1024.0) * 3.3;
-  float temperature = (voltage - .5) * 100;
-  return temperature;
-}
+// for analog temperature sensor
+//float getTemp(){
+//  int sensorVal = analogRead(sensorPin);
+//  float voltage = (sensorVal / 1024.0) * 3.3;
+//  float temperature = (voltage - .5) * 100;
+//  return temperature;
+//}
 
 float getHumidity(){
   int sensorVal = analogRead(humidityPin);
@@ -142,8 +145,9 @@ void off_1(){
 
 void readSensors(){
   StaticJsonDocument<300> doc;
-  doc["temp"]=getTemp();
   doc["humidity"]=getHumidity();
+  doc["air_humidity"]=dht.readHumidity();
+  doc["temperature"]=dht.readTemperature();
   String output;
   serializeJsonPretty(doc, output);
   Serial.println();
@@ -320,6 +324,8 @@ void setup() {
   delay(10);
   Serial.println("\r\n");
 
+  dht.begin();
+  
   timerList = initTimers();
   startWiFi();                   
   startUDP();
