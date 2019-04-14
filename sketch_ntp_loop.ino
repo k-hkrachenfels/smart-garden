@@ -7,12 +7,11 @@
 #include <DHT.h>
 
 ESP8266WebServer server(80);
-int ledPin0 = D0;   // D0
-int ledPin1 = D1;  // D1
-bool ledState0 = HIGH; // Ventil geschlossen
-bool ledState1 = HIGH; // Ventil offen
+//int ledPin0 = D0;   // D0
+//int ledPin1 = D1;  // D1
+//bool ledState0 = HIGH; // Ventil geschlossen
+//bool ledState1 = HIGH; // Ventil offen
 const int humidityPin = A0; 
-//const int A1PIN = 15;  // find include file for A1 for NodeMCU board
 DHT dht(D2,DHT11);
 
 ESP8266WiFiMulti wifiMulti;      
@@ -89,6 +88,10 @@ class Pin{
     int readState(){
       return state;
     }
+    void activate(){
+      pinMode(pin, OUTPUT);
+      digitalWrite(pin, state);
+    }
     void requestState( uint requestMe){
       requestedState = requestMe;
     }
@@ -119,34 +122,34 @@ float getHumidity(){
 
 // ------- REST CALLS -------------
 void toggle_0(){
-  ledState0 = !ledState0;
-  digitalWrite(ledPin0, ledState0);
-  server.send(200, "text/plain", "LED0 toggled");
+  //ledState0 = !ledState0;
+  //digitalWrite(ledPin0, ledState0);
+  //server.send(200, "text/plain", "LED0 toggled");
 }
 void toggle_1(){
-  ledState1 = !ledState1;
-  digitalWrite(ledPin1, ledState1);
-  server.send(200, "text/plain", "LED1 toggled");
+  //ledState1 = !ledState1;
+  //digitalWrite(ledPin1, ledState1);
+  //server.send(200, "text/plain", "LED1 toggled");
 }
 void on_0(){
-  ledState0 = HIGH;
-  digitalWrite(ledPin0, ledState0);
-  server.send(200, "text/plain", "LED0 HIGH");
+  //ledState0 = HIGH;
+  //digitalWrite(ledPin0, ledState0);
+  //server.send(200, "text/plain", "LED0 HIGH");
 }
 void on_1(){
-  ledState1 = HIGH;
-  digitalWrite(ledPin1, ledState1);
-  server.send(200, "text/plain", "LED1 HIGH");
+  //ledState1 = HIGH;
+  //digitalWrite(ledPin1, ledState1);
+  //server.send(200, "text/plain", "LED1 HIGH");
 }
 void off_0(){
-  ledState0 = LOW;
-  digitalWrite(ledPin0, ledState0);
-  server.send(200, "text/plain", "LED0 LOW");
+  //ledState0 = LOW;
+  //digitalWrite(ledPin0, ledState0);
+  //server.send(200, "text/plain", "LED0 LOW");
 }
 void off_1(){
-  ledState1 = LOW;
-  digitalWrite(ledPin1, ledState1);
-  server.send(200, "text/plain", "LED1 LOW");
+  //ledState1 = LOW;
+  //digitalWrite(ledPin1, ledState1);
+  //server.send(200, "text/plain", "LED1 LOW");
 }
 
 /*****************************************************
@@ -414,8 +417,15 @@ void setup() {
   }
 
   // init output pins
-  pinMode(D0, OUTPUT);
-  digitalWrite(ledPin0, ledState0);
+  //pinMode(D0, OUTPUT);
+  //digitalWrite(ledPin0, ledState0);
+  int num_pins = sizeof(pins)/sizeof(pins[0]);
+  Serial.printf("%d pin(s) configured\n", num_pins);
+
+  for( uint act_pin = 0; act_pin<num_pins; act_pin++){
+    Pin *pin=&pins[act_pin];
+    pin->activate();
+  }
   
   // register handlers
   server.on("/toggle1", toggle_1);
