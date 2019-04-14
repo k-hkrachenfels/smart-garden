@@ -31,40 +31,16 @@ unsigned long lastCallbackActivationTime = 0;
 #define STATE_INACTIVE 0
 #define STATE_ACTIVE 1
 
-class Timer {
-  private:
-  public:
-    uint start_hour;
-    uint start_minute;
-    uint end_hour;
-    uint end_minute;
-    uint pin;
-    int state;
-    
-    Timer(uint start_hour, uint start_minute, uint end_hour, uint end_minute, uint pin) : 
-          start_hour(start_hour), start_minute(start_minute), 
-          end_hour(start_hour), end_minute(end_minute), 
-          pin(pin), state(STATE_INACTIVE)
-    {};   
 
-    boolean isBeforeStartTime(uint hour, uint minute){
-      if( hour< start_hour)
-        return true;
-      else if( hour==start_hour && minute < start_minute)
-        return true;
-      return false;
-    }
+// ------- Conditions -------------
 
-    boolean isAfterEndTime(uint hour, uint minute){
-      if( hour> end_hour)
-        return true;
-      else if( hour==end_hour && minute > end_minute)
-        return true;
-      return false;
-    }
-};
-LinkedList<Timer*> *timerList;
-
+/**
+ * Note: not yet used
+ * 
+ * Plan: each timer can be combined with condition
+ * e.g. water on between 8:00 and 8:30 when condition humidity<20 holds
+ * i.e. condition conbines sensor values.
+ */
 class Condition{
   private:
   public:
@@ -94,6 +70,7 @@ class Condition1{
     }
 };
 
+// ------- Pins -------------
 class Pin{
   private:
     int pin;
@@ -129,19 +106,11 @@ class Pin{
     }
 };
 
-Pin pins[] = {Pin(D0, LOW), Pin(D1,HIGH)};
+Pin pins[] = {Pin(D0, HIGH), Pin(D1,HIGH)};
 
 //Condition conditions[] = {};
 
 // ------- SENSORS -------------
-
-// for analog temperature sensor
-//float getTemp(){
-//  int sensorVal = analogRead(sensorPin);
-//  float voltage = (sensorVal / 1024.0) * 3.3;
-//  float temperature = (voltage - .5) * 100;
-//  return temperature;
-//}
 
 float getHumidity(){
   int sensorVal = analogRead(humidityPin);
@@ -180,6 +149,9 @@ void off_1(){
   server.send(200, "text/plain", "LED1 LOW");
 }
 
+/*****************************************************
+ * REST Api to query sensors
+ *****************************************************/
 void readSensors(){
   StaticJsonDocument<300> doc;
   doc["humidity"]=getHumidity();
@@ -192,8 +164,53 @@ void readSensors(){
   server.send(200,"text/json",output);
 }
 
+// ------- TIMERS -------------
+/*****************************************************
+ * Timer Class definition
+ *****************************************************/
+class Timer {
+  private:
+  public:
+    uint start_hour;
+    uint start_minute;
+    uint end_hour;
+    uint end_minute;
+    uint pin;
+    int state;
+    
+    Timer(uint start_hour, uint start_minute, uint end_hour, uint end_minute, uint pin) : 
+          start_hour(start_hour), start_minute(start_minute), 
+          end_hour(start_hour), end_minute(end_minute), 
+          pin(pin), state(STATE_INACTIVE)
+    {};   
+
+    boolean isBeforeStartTime(uint hour, uint minute){
+      if( hour< start_hour)
+        return true;
+      else if( hour==start_hour && minute < start_minute)
+        return true;
+      return false;
+    }
+
+    boolean isAfterEndTime(uint hour, uint minute){
+      if( hour> end_hour)
+        return true;
+      else if( hour==end_hour && minute >= end_minute)
+        return true;
+      return false;
+    }
+};
+
+/*****************************************************
+ * Declare pointer to List with timers
+ *****************************************************/
+LinkedList<Timer*> *timerList = NULL;
+
+/*****************************************************
+ * proc to init Timers by filling list
+ *****************************************************/
 LinkedList<Timer*>* initTimers(){
-    Timer *t1 = new Timer(18, 30, 18, 32, 0);
+    Timer *t1 = new Timer(19, 20, 19, 32, 0);
     Timer *t2 = new Timer(18, 35, 18, 37, 0);
     Timer *t3 = new Timer(18, 40, 18, 42, 0);
     Timer *t4 = new Timer(18, 45, 18, 47, 0);
@@ -206,6 +223,10 @@ LinkedList<Timer*>* initTimers(){
     timerList->add(t5);
     return timerList;
 }
+
+/*****************************************************
+ * REST call to query timers
+ *****************************************************/
 void timers(){
     DynamicJsonDocument doc(1024);
     JsonObject root = doc.to<JsonObject>();
@@ -227,7 +248,61 @@ void timers(){
     server.send(200,"text/json",output);
 }
 
-// ------- TIME RELATED -------------
+/*****************************************************
+ * execute Timer callbacks in 
+ * will be executed in fixed intervals e.g. every 
+ * 10 seconds
+ *****************************************************/
+void triggerCallbacks( uint32_t actualTime ){
+    if(actualTime - lastCallbackActivationTime < 10)
+      return;
+    int actualHour = getHours(actualTime);
+    int actualMinute =getMinutes(actualTime);
+    Serial.print(actualHour);
+    Serial.print(":");
+    Serial.println(actualMinute);
+
+  int num_pins = sizeof(pins)/sizeof(pins[0]);
+  Serial.printf("%d pin(s) configured\n", num_pins);
+
+  for( uint act_pin = 0; act_pin<num_pins; act_pin++){
+    Pin *pin=&pins[act_pin];
+    pin->requestState(HIGH);
+  }
+    
+  for(int i=0; i<timerList->size(); i++){
+    Timer *timer=timerList->get(i);
+
+    Serial.print("Timer ");
+    Serial.print(i);
+    Serial.print(". ");
+    Serial.print(timer->start_hour);
+    Serial.print(":");
+    Serial.print(timer->start_minute);
+    Serial.print(" - ");
+    Serial.print(timer->end_hour);
+    Serial.print(":");
+    Serial.print(timer->end_minute);
+    Serial.print(" ");
+
+    Pin *pin=&pins[timer->pin];
+    if(timer->isBeforeStartTime(actualHour, actualMinute) ){
+      Serial.println(" not yet reached");
+    } else if(timer->isAfterEndTime(actualHour, actualMinute) ){
+      Serial.println(" already passed");
+    } else {
+      Serial.println(" active");
+      pin->requestState(LOW);
+    }   
+  }
+  for( uint act_pin = 0; act_pin<num_pins; act_pin++){
+    Pin *pin=&pins[act_pin];
+    pin->commitRequestedState();
+  }
+}
+
+
+// ------- NTP TIME -------------
 
 uint32_t getTime() {
   if (UDP.parsePacket() == 0)
@@ -279,15 +354,12 @@ uint32_t updateTimes(){
   uint32_t actualTime = timeUNIX + (currentMillis - lastNTPResponse)/1000;
   if (actualTime != prevActualTime && timeUNIX != 0) { 
     prevActualTime = actualTime;
-    //Serial.printf("\rUTC time:\t%d:%d:%d   ", getHours(actualTime), 
-    //              getMinutes(actualTime), getSeconds(actualTime));
-    //Serial.println();
   }  
   return actualTime;
 }
 
 
-// LAN AND NETWORKING
+// ------------ LAN AND NETWORKING ------------
 
 void startWiFi() { 
   wifiMulti.addAP("dlink-4DA8", "31415926089612867501764661889901764662708917072004000000000");   
@@ -301,7 +373,7 @@ void startWiFi() {
   
   WiFi.hostname("ESP2"); // TODO - table with mac addresses and host-names here to get
                          // static ip addresses
-  
+
   Serial.println("\r\n");
   Serial.print("Connected to ");
   Serial.println(WiFi.SSID());   
@@ -309,8 +381,6 @@ void startWiFi() {
   Serial.print("IP address:\t");
   Serial.print(WiFi.localIP());           
   Serial.println("\r\n");
-  
-
 }
 
 void startUDP() {
@@ -321,55 +391,6 @@ void startUDP() {
   Serial.println();
 }
 
-// -- callbacks --
-
-void triggerCallbacks( uint32_t actualTime ){
-    if(actualTime - lastCallbackActivationTime < 10)
-      return;
-    int actualHour = getHours(actualTime);
-    int actualMinute =getMinutes(actualTime);
-    Serial.print(actualHour);
-    Serial.print(":");
-    Serial.println(actualMinute);
-
-  int num_pins = 2;
-  Serial.printf("%ud pins found\n");
-
-  for( uint act_pin = 0; act_pin<num_pins; act_pin++){
-    Pin *pin=&pins[act_pin];
-    pin->requestState(HIGH);
-  }
-    
-  for(int i=0; i<timerList->size(); i++){
-    Timer *timer=timerList->get(i);
-
-    Serial.print("Timer ");
-    Serial.print(i);
-    Serial.print(". ");
-    Serial.print(timer->start_hour);
-    Serial.print(":");
-    Serial.print(timer->start_minute);
-    Serial.print(" - ");
-    Serial.print(timer->end_hour);
-    Serial.print(":");
-    Serial.print(timer->end_minute);
-    Serial.print(" ");
-
-    Pin *pin=&pins[timer->pin];
-    if(timer->isBeforeStartTime(actualHour, actualMinute) ){
-      Serial.println(" not yet reached");
-    } else if(timer->isAfterEndTime(actualHour, actualMinute) ){
-      Serial.println(" already passed");
-    } else {
-      Serial.println(" active");
-      pin->requestState(LOW);
-    }   
-  }
-  for( uint act_pin = 0; act_pin<num_pins; act_pin++){
-    Pin *pin=&pins[act_pin];
-    pin->commitRequestedState();
-  }
-}
 
 // -- setup and main loop
 
