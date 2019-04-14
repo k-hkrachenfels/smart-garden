@@ -9,9 +9,9 @@
 ESP8266WebServer server(80);
 int ledPin0 = D0;   // D0
 int ledPin1 = D1;  // D1
-bool ledState0 = LOW; //HIGH; // ventil geschlossen
-bool ledState1 = LOW; //HIGH;
-const int humidityPin = A0; //14
+bool ledState0 = HIGH; // Ventil geschlossen
+bool ledState1 = HIGH; // Ventil offen
+const int humidityPin = A0; 
 //const int A1PIN = 15;  // find include file for A1 for NodeMCU board
 DHT dht(D2,DHT11);
 
@@ -38,13 +38,13 @@ class Timer {
     uint start_minute;
     uint end_hour;
     uint end_minute;
-    uint relais_num;
+    uint pin;
     int state;
     
-    Timer(uint start_hour, uint start_minute, uint end_hour, uint end_minute, uint relais_num) : 
+    Timer(uint start_hour, uint start_minute, uint end_hour, uint end_minute, uint pin) : 
           start_hour(start_hour), start_minute(start_minute), 
           end_hour(start_hour), end_minute(end_minute), 
-          relais_num(relais_num), state(STATE_INACTIVE)
+          pin(pin), state(STATE_INACTIVE)
     {};   
 
     boolean isBeforeStartTime(uint hour, uint minute){
@@ -93,6 +93,43 @@ class Condition1{
       return "temp>5 && humidity<10";
     }
 };
+
+class Pin{
+  private:
+    int pin;
+    int state;
+    int requestedState;
+  public:
+    Pin(int pin, int state): state(state), pin(pin){
+      digitalWrite(pin, state);
+      Serial.printf("pin %d set to %d\n", pin, state);
+    }
+    void setState( int new_state){
+      state = new_state;
+      digitalWrite(pin, state);
+      Serial.printf("pin %d set to %d\n", pin, state);
+    }
+    int readState(){
+      return state;
+    }
+    void requestState( uint requestMe){
+      requestedState = requestMe;
+    }
+    void commitRequestedState(){
+      setState( requestedState );
+    }
+    void toggleState(){
+      if(state==HIGH){
+        setState(LOW);
+      } else if(state==LOW){
+        setState(HIGH);
+      } else  {
+        Serial.println("invalid state"); // TODO: errorhandling
+      }
+    }
+};
+
+Pin pins[] = {Pin(D0, LOW), Pin(D1,HIGH)};
 
 //Condition conditions[] = {};
 
@@ -156,11 +193,17 @@ void readSensors(){
 }
 
 LinkedList<Timer*>* initTimers(){
-    Timer *t1 = new Timer(16, 30, 16, 59, 0);
-    Timer *t2 = new Timer(11, 0, 11, 10, 1);
-    LinkedList<Timer*>* timerList =  new LinkedList<Timer*>();
+    Timer *t1 = new Timer(18, 30, 18, 32, 0);
+    Timer *t2 = new Timer(18, 35, 18, 37, 0);
+    Timer *t3 = new Timer(18, 40, 18, 42, 0);
+    Timer *t4 = new Timer(18, 45, 18, 47, 0);
+    Timer *t5 = new Timer(18, 50, 18, 52, 0);
+    LinkedList<Timer*>* timerList = new LinkedList<Timer*>();
     timerList->add(t1);
     timerList->add(t2);
+    timerList->add(t3);
+    timerList->add(t4);
+    timerList->add(t5);
     return timerList;
 }
 void timers(){
@@ -174,7 +217,7 @@ void timers(){
       timer["start_minute"] = t->start_minute;
       timer["end_hour"] = t->end_hour;
       timer["end_minute"] = t->end_minute;
-      timer["relais_num"] = t->relais_num;
+      timer["pin"] = t->pin;
     }
     serializeJsonPretty(doc,Serial); 
     String output;
@@ -289,6 +332,13 @@ void triggerCallbacks( uint32_t actualTime ){
     Serial.print(":");
     Serial.println(actualMinute);
 
+  int num_pins = 2;
+  Serial.printf("%ud pins found\n");
+
+  for( uint act_pin = 0; act_pin<num_pins; act_pin++){
+    Pin *pin=&pins[act_pin];
+    pin->requestState(HIGH);
+  }
     
   for(int i=0; i<timerList->size(); i++){
     Timer *timer=timerList->get(i);
@@ -305,14 +355,19 @@ void triggerCallbacks( uint32_t actualTime ){
     Serial.print(timer->end_minute);
     Serial.print(" ");
 
+    Pin *pin=&pins[timer->pin];
     if(timer->isBeforeStartTime(actualHour, actualMinute) ){
       Serial.println(" not yet reached");
     } else if(timer->isAfterEndTime(actualHour, actualMinute) ){
       Serial.println(" already passed");
     } else {
       Serial.println(" active");
-    }
-    
+      pin->requestState(LOW);
+    }   
+  }
+  for( uint act_pin = 0; act_pin<num_pins; act_pin++){
+    Pin *pin=&pins[act_pin];
+    pin->commitRequestedState();
   }
 }
 
@@ -324,6 +379,7 @@ void setup() {
   delay(10);
   Serial.println("\r\n");
 
+  // init digital DHT11 sensor
   dht.begin();
   
   timerList = initTimers();
@@ -336,8 +392,9 @@ void setup() {
     ESP.reset();
   }
 
-  // define PIN Modes
+  // init output pins
   pinMode(D0, OUTPUT);
+  digitalWrite(ledPin0, ledState0);
   
   // register handlers
   server.on("/toggle1", toggle_1);
