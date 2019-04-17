@@ -7,10 +7,6 @@
 #include <DHT.h>
 
 ESP8266WebServer server(80);
-//int ledPin0 = D0;   // D0
-//int ledPin1 = D1;  // D1
-//bool ledState0 = HIGH; // Ventil geschlossen
-//bool ledState1 = HIGH; // Ventil offen
 const int humidityPin = A0; 
 DHT dht(D2,DHT11);
 
@@ -27,12 +23,7 @@ uint32_t timeUNIX = 0;
 unsigned long prevActualTime = 0;
 unsigned long lastCallbackActivationTime = 0;
 
-#define STATE_INACTIVE 0
-#define STATE_ACTIVE 1
-
-
 // ------- Conditions -------------
-
 /**
  * Note: not yet used
  * 
@@ -114,10 +105,16 @@ Pin pins[] = {Pin(D0, HIGH), Pin(D1,HIGH)};
 //Condition conditions[] = {};
 
 // ------- SENSORS -------------
-
+const int AirValue = 850;   
+const int WaterValue = 350;  
 float getHumidity(){
   int sensorVal = analogRead(humidityPin);
-  return sensorVal;
+  int return_val = 100*(AirValue - sensorVal)/(AirValue-WaterValue);
+  if(return_val>100)
+    return_val=100;
+  else if(return_val<0)
+    return_val=0;
+  return return_val;
 }
 
 // ------- REST CALLS -------------
@@ -167,11 +164,13 @@ void readSensors(){
   server.send(200,"text/json",output);
 }
 
+
+
 // ------- TIMERS -------------
 /*****************************************************
  * Timer Class definition
  *****************************************************/
-class Timer {
+class Timer{
   private:
   public:
     uint start_hour;
@@ -179,14 +178,22 @@ class Timer {
     uint end_hour;
     uint end_minute;
     uint pin;
-    int state;
+
     
     Timer(uint start_hour, uint start_minute, uint end_hour, uint end_minute, uint pin) : 
           start_hour(start_hour), start_minute(start_minute), 
-          end_hour(start_hour), end_minute(end_minute), 
-          pin(pin), state(STATE_INACTIVE)
+          end_hour(end_hour), end_minute(end_minute), 
+          pin(pin)
     {};   
 
+    uint start_minutes(){
+       return start_hour*60+start_minute;
+    }
+    
+    boolean gt( Timer *other){
+        return start_minutes() > other->start_minutes();
+    }
+    
     boolean isBeforeStartTime(uint hour, uint minute){
       if( hour< start_hour)
         return true;
@@ -204,6 +211,16 @@ class Timer {
     }
 };
 
+int compare(Timer *&a, Timer *&b);
+int compare(Timer *&a, Timer *&b) {
+  if(a->start_minutes()<b->start_minutes())
+    return -1;
+  else if(a->start_minutes()>b->start_minutes())
+    return 1;
+  else
+    return 0;
+}
+
 /*****************************************************
  * Declare pointer to List with timers
  *****************************************************/
@@ -213,17 +230,14 @@ LinkedList<Timer*> *timerList = NULL;
  * proc to init Timers by filling list
  *****************************************************/
 LinkedList<Timer*>* initTimers(){
-    Timer *t1 = new Timer(19, 20, 19, 32, 0);
-    Timer *t2 = new Timer(18, 35, 18, 37, 0);
-    Timer *t3 = new Timer(18, 40, 18, 42, 0);
-    Timer *t4 = new Timer(18, 45, 18, 47, 0);
-    Timer *t5 = new Timer(18, 50, 18, 52, 0);
+    Timer *t1 = new Timer(19, 0, 19, 30, 0);
+    Timer *t2 = new Timer(8, 00, 8, 30, 0);
+
     LinkedList<Timer*>* timerList = new LinkedList<Timer*>();
     timerList->add(t1);
     timerList->add(t2);
-    timerList->add(t3);
-    timerList->add(t4);
-    timerList->add(t5);
+
+    timerList->sort(compare);
     return timerList;
 }
 
@@ -314,7 +328,7 @@ uint32_t getTime() {
   uint32_t NTPTime = (NTPBuffer[40] << 24) | (NTPBuffer[41] << 16) | (NTPBuffer[42] << 8) | NTPBuffer[43];
   const uint32_t seventyYears = 2208988800UL;
   uint32_t UNIXTime = NTPTime - seventyYears;
-  return UNIXTime;
+  return UNIXTime+2*3600; // convert to MEZ summer timer
 }
 
 void sendNTPpacket(IPAddress& address) {
