@@ -7,8 +7,9 @@
 #include <DHT.h>
 
 ESP8266WebServer server(80);
-const int humidityPin = A0; 
-DHT dht(D2,DHT11);
+const int humidityPin = A0; // -> replace
+const int analogPin = A0;
+DHT dht(D4,DHT11);
 
 ESP8266WiFiMulti wifiMulti;      
 WiFiUDP UDP;                     
@@ -22,6 +23,34 @@ unsigned long lastNTPResponse = millis();
 uint32_t timeUNIX = 0;
 unsigned long prevActualTime = 0;
 unsigned long lastCallbackActivationTime = 0;
+
+// Pins to select analog channel
+int s0 = D6;
+int s1 = D7;
+int s2 = D8;
+
+// analog multiplexer setup
+void setupMultiplexerSelectPins(){
+  pinMode(s0, OUTPUT);
+  pinMode(s1, OUTPUT);
+  pinMode(s2, OUTPUT);
+}
+
+// analog multiplexer setup
+int readAnalogPin( int pinNum) {
+  int input = 0;
+  int bit0 = 0;
+  int bit1 = 0;
+  int bit2 = 0;
+  int s0_val = pinNum & 1 ? HIGH : LOW;
+  int s1_val = (pinNum >> 1) & 1 ? HIGH : LOW;
+  int s2_val  = (pinNum >> 1) & 1 ? HIGH : LOW;
+  digitalWrite(s0,LOW);
+  digitalWrite(s1,LOW);
+  digitalWrite(s2,LOW);
+  input = analogRead(analogPin);
+  return input;
+}
 
 // ------- Conditions -------------
 /**
@@ -230,12 +259,14 @@ LinkedList<Timer*> *timerList = NULL;
  * proc to init Timers by filling list
  *****************************************************/
 LinkedList<Timer*>* initTimers(){
-    Timer *t1 = new Timer(19, 0, 19, 30, 0);
+    Timer *t1 = new Timer(19, 50, 20, 20, 0);
     Timer *t2 = new Timer(8, 00, 8, 30, 0);
+    Timer *t3 = new Timer(10, 00, 10, 15, 0);
 
     LinkedList<Timer*>* timerList = new LinkedList<Timer*>();
     timerList->add(t1);
     timerList->add(t2);
+    timerList->add(t3);
 
     timerList->sort(compare);
     return timerList;
