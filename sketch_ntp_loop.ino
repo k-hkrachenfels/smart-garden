@@ -39,16 +39,23 @@ void setupMultiplexerSelectPins(){
 // analog multiplexer setup
 int readAnalogPin( int pinNum) {
   int input = 0;
-  int bit0 = 0;
-  int bit1 = 0;
-  int bit2 = 0;
   int s0_val = pinNum & 1 ? HIGH : LOW;
   int s1_val = (pinNum >> 1) & 1 ? HIGH : LOW;
-  int s2_val  = (pinNum >> 1) & 1 ? HIGH : LOW;
-  digitalWrite(s0,LOW);
-  digitalWrite(s1,LOW);
-  digitalWrite(s2,LOW);
+  int s2_val  = (pinNum >> 2) & 1 ? HIGH : LOW;
+  //digitalWrite(s0,s0_val);
+  //digitalWrite(s1,s1_val);
+  //digitalWrite(s2,s2_val);
+
+  Serial.print(s2_val);
+  Serial.print(s1_val);
+  Serial.println(s0_val);
+      
   input = analogRead(analogPin);
+  Serial.print(" analogPin: ");
+  Serial.print(pinNum);
+  Serial.print(", value: ");
+  Serial.println(input);
+  delay(1000);  
   return input;
 }
 
@@ -90,6 +97,7 @@ class Condition1{
 };
 
 // ------- Pins -------------
+// a digital output pin
 class Pin{
   private:
     int pin;
@@ -191,6 +199,8 @@ void readSensors(){
   Serial.println();
   serializeJsonPretty(doc, Serial);
   server.send(200,"text/json",output);
+  for( int i=0; i<4; i++)
+    readAnalogPin(i);
 }
 
 
