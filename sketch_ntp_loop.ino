@@ -42,9 +42,9 @@ int readAnalogPin( int pinNum) {
   int s0_val = pinNum & 1 ? HIGH : LOW;
   int s1_val = (pinNum >> 1) & 1 ? HIGH : LOW;
   int s2_val  = (pinNum >> 2) & 1 ? HIGH : LOW;
-  //digitalWrite(s0,s0_val);
-  //digitalWrite(s1,s1_val);
-  //digitalWrite(s2,s2_val);
+  digitalWrite(s0,s0_val);
+  digitalWrite(s1,s1_val);
+  digitalWrite(s2,s2_val);
 
   Serial.print(s2_val);
   Serial.print(s1_val);
@@ -59,6 +59,13 @@ int readAnalogPin( int pinNum) {
   return input;
 }
 
+
+class JsonMappable{
+  private:
+  public:
+    virtual JsonObject toJson( JsonObject parent)=0;
+};
+
 // ------- Conditions -------------
 /**
  * Note: not yet used
@@ -67,34 +74,48 @@ int readAnalogPin( int pinNum) {
  * e.g. water on between 8:00 and 8:30 when condition humidity<20 holds
  * i.e. condition conbines sensor values.
  */
-class Condition{
+class Condition : public JsonMappable {
   private:
   public:
     virtual bool check(uint temp, uint humidity) =0;
     virtual String description()=0;
 };
 
-class Condition0{
+class Condition0 : public Condition{
     private:
   public:
     virtual bool check(uint temp, uint humidity){
       return true;
     }
     virtual String description(){
-      return "true";
+      return "always true";
     }
+    
+    virtual JsonObject toJson(JsonObject parent){
+      JsonObject object = parent.createNestedObject("Condition0");
+      object["description"] = description();
+      return object;
+    };
 };
 
-class Condition1{
+class Condition1: public Condition{
     private:
   public:
     virtual bool check(uint temp, uint humidity){
       return temp>5 && humidity<10;
     }
     virtual String description(){
-      return "temp>5 && humidity<10";
+      return "temp>x && humidity<y";
     }
+    virtual JsonObject toJson(JsonObject parent){
+      JsonObject object = parent.createNestedObject("Condition1");
+      object["description"] = description();
+      object["x"]=5;
+      object["y"]=10;
+      return object;
+    };
 };
+
 
 // ------- Pins -------------
 // a digital output pin
@@ -139,7 +160,7 @@ class Pin{
 
 Pin pins[] = {Pin(D0, HIGH), Pin(D1,HIGH)};
 
-//Condition conditions[] = {};
+Condition *conditions[] = {new Condition0(), new Condition1()};
 
 // ------- SENSORS -------------
 const int AirValue = 850;   
@@ -209,7 +230,7 @@ void readSensors(){
 /*****************************************************
  * Timer Class definition
  *****************************************************/
-class Timer{
+class Timer : public JsonMappable {
   private:
   public:
     uint start_hour;
@@ -217,12 +238,12 @@ class Timer{
     uint end_hour;
     uint end_minute;
     uint pin;
-
+    Condition *condition;
     
-    Timer(uint start_hour, uint start_minute, uint end_hour, uint end_minute, uint pin) : 
+    Timer(uint start_hour, uint start_minute, uint end_hour, uint end_minute, uint pin, Condition *condition) : 
           start_hour(start_hour), start_minute(start_minute), 
-          end_hour(end_hour), end_minute(end_minute), 
-          pin(pin)
+          end_hour(end_hour), end_minute(end_minute),
+          pin(pin), condition(condition)
     {};   
 
     uint start_minutes(){
@@ -248,6 +269,23 @@ class Timer{
         return true;
       return false;
     }
+
+    Condition *getCondition(){
+      return condition;
+    }
+
+    virtual JsonObject toJson(JsonObject parent){
+      JsonObject object = parent.createNestedObject("Timer");
+      object["start_hour"] = start_hour;
+      object["start_minute"] = start_minute;
+      object["end_hour"] = end_hour;
+      object["end_minute"] = end_minute;
+      object["pin"] = pin;
+      Condition *condition = getCondition();
+      condition->toJson(object); // return value not needed
+      return object;
+    };
+    
 };
 
 int compare(Timer *&a, Timer *&b);
@@ -269,41 +307,47 @@ LinkedList<Timer*> *timerList = NULL;
  * proc to init Timers by filling list
  *****************************************************/
 LinkedList<Timer*>* initTimers(){
-    Timer *t1 = new Timer(19, 50, 20, 20, 0);
-    Timer *t2 = new Timer(8, 00, 8, 30, 0);
-    Timer *t3 = new Timer(10, 00, 10, 15, 0);
-
     LinkedList<Timer*>* timerList = new LinkedList<Timer*>();
-    timerList->add(t1);
-    timerList->add(t2);
-    timerList->add(t3);
-
-    timerList->sort(compare);
+    timerList->add(new Timer(19, 50, 20, 20, 0, new Condition0()));
+    timerList->add(new Timer(8, 00, 8, 30, 0, new Condition0()));
+    timerList->add(new Timer(10, 00, 10, 15, 0, new Condition0()));
+    timerList->add(new Timer(0, 0, 24, 0, 1, new Condition1()));
+    timerList->sort(compare); // order is only relevant for displaying timers
     return timerList;
+}
+
+void addTimer( uint start_hour, uint start_minute, uint end_hour, uint end_minute, uint pin, uint condition_num){
+  Timer* timer = new Timer(start_hour, start_minute, end_hour, end_minute, pin, conditions[condition_num]);
+  timerList->add(timer);
+  timerList->sort(compare);
+}
+
+void deleteTimer( uint index){
+  Timer *removeMe = timerList->remove(index);
 }
 
 /*****************************************************
  * REST call to query timers
  *****************************************************/
+
+StaticJsonDocument<2048> doc;
 void timers(){
-    DynamicJsonDocument doc(1024);
+    //DynamicJsonDocument doc(1024);
+    
     JsonObject root = doc.to<JsonObject>();
     JsonArray timers = root.createNestedArray("timers");
     for (int i = 0; i < timerList->size(); i++) {
       Timer *t = timerList->get(i);
       JsonObject timer = timers.createNestedObject();
-      timer["start_hour"] = t->start_hour;
-      timer["start_minute"] = t->start_minute;
-      timer["end_hour"] = t->end_hour;
-      timer["end_minute"] = t->end_minute;
-      timer["pin"] = t->pin;
+      t->toJson(timer);
     }
-    serializeJsonPretty(doc,Serial); 
+    //serializeJsonPretty(doc,Serial); 
     String output;
     serializeJsonPretty(doc, output);
     Serial.println();
     serializeJsonPretty(doc, Serial);
     server.send(200,"text/json",output);
+
 }
 
 /*****************************************************
@@ -330,7 +374,6 @@ void triggerCallbacks( uint32_t actualTime ){
     
   for(int i=0; i<timerList->size(); i++){
     Timer *timer=timerList->get(i);
-
     Serial.print("Timer ");
     Serial.print(i);
     Serial.print(". ");
@@ -344,12 +387,16 @@ void triggerCallbacks( uint32_t actualTime ){
     Serial.print(" ");
 
     Pin *pin=&pins[timer->pin];
+    Condition *condition = timer->getCondition();
     if(timer->isBeforeStartTime(actualHour, actualMinute) ){
       Serial.println(" not yet reached");
     } else if(timer->isAfterEndTime(actualHour, actualMinute) ){
       Serial.println(" already passed");
     } else {
       Serial.println(" active");
+      float humidity = getHumidity();
+      float temperature = dht.readTemperature();
+      boolean activateCondition = condition->check(humidity, temperature); // check types
       pin->requestState(LOW);
     }   
   }
@@ -359,9 +406,65 @@ void triggerCallbacks( uint32_t actualTime ){
   }
 }
 
+void json_to_resource(DynamicJsonDocument jsonBody) {
+    uint start_hour = jsonBody["startHour"];
+    uint start_minute = jsonBody["startMinute"];
+    uint end_hour = jsonBody["endHour"];
+    uint end_minute = jsonBody["endMinute"];
+    uint pin = jsonBody["pin"];
+    uint condition = jsonBody["condition"];
+    addTimer(start_hour, start_minute, end_hour, end_minute, pin, condition);
+}
+
+DynamicJsonDocument jsonBody(1000); // avoid mem leaks
+void post_put_timer() {
+    String post_body = server.arg("plain");
+    Serial.print("body=");
+    Serial.println(post_body);
+
+    // Deserialize the JSON document
+    DeserializationError error = deserializeJson(jsonBody, post_body);
+  
+    // Test if parsing succeeds.
+    if (error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.c_str());
+      server.send(400);
+      return;
+    }
+ 
+    json_to_resource(jsonBody);
+    server.send(200,"text/plain","added Timer");
+
+}
+
+
+
+void delete_from_json(DynamicJsonDocument jsonBody) {
+    uint id = jsonBody["id"];
+    deleteTimer(id);
+}
+void delete_timer() {
+    String post_body = server.arg("plain");
+    Serial.print("body=");
+    Serial.println(post_body);
+    DynamicJsonDocument jsonBody(1000);
+    DeserializationError error = deserializeJson(jsonBody, post_body);
+  
+    // Test if parsing succeeds.
+    if (error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.c_str());
+      server.send(400);
+      return;
+    }
+ 
+    delete_from_json(jsonBody);
+    server.send(200,"text/plain","deleted Timer");
+
+}
 
 // ------- NTP TIME -------------
-
 uint32_t getTime() {
   if (UDP.parsePacket() == 0)
     return 0;
@@ -491,6 +594,9 @@ void setup() {
   server.on("/off0", off_0);
   server.on("/timers", timers);
   server.on("/sensors", readSensors);
+  server.on("/timer", HTTP_POST, post_put_timer);
+  server.on("/timer", HTTP_PUT, post_put_timer);
+  server.on("/timer", HTTP_DELETE, delete_timer);
  
   // Start the server
   server.begin();
