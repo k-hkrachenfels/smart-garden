@@ -82,7 +82,10 @@ class Pin: public JsonMappable{
     void setState( int new_state){
       state = new_state;
       digitalWrite(pin, state);
-      Serial.printf("pin %d set to %d\n", pin, state);
+      Serial.print("Pin ");
+      Serial.print(pin);
+      Serial.print(" setting state ");
+      Serial.println(state);
     }
     int readState(){
       return state;
@@ -92,9 +95,17 @@ class Pin: public JsonMappable{
       digitalWrite(pin, state);
     }
     void requestState( uint requestMe){
+      Serial.print("Pin ");
+      Serial.print(pin);
+      Serial.print(" requesting state ");
+      Serial.println(requestMe);
       requestedState = requestMe;
     }
     void commitRequestedState(){
+      Serial.print("Pin ");
+      Serial.print(pin);
+      Serial.print(" setting state ");
+      Serial.println(requestedState);
       setState( requestedState );
     }
     void toggleState(){
@@ -114,7 +125,7 @@ class Pin: public JsonMappable{
     };
 };
 
-//Pin pins[] = {Pin(D0, HIGH), Pin(D1,HIGH)};
+
 class State: public JsonMappable {
   private:
     boolean autoMode=true; 
@@ -142,6 +153,14 @@ class State: public JsonMappable {
     }
     boolean isAutoMode(){
       return autoMode;
+    }
+    void debugPrint(){
+      for (int i = 0; i < sizeof(pins)/sizeof(pins[0]); i++) {
+        Serial.print("Pin #");
+        Serial.print(i);
+        Serial.print(", state: ");
+        Serial.println(pins[i].readState());
+      }
     }
 };
 State state = State();
@@ -343,9 +362,9 @@ LinkedList<Timer*> *timerList = NULL;
  *****************************************************/
 LinkedList<Timer*>* initTimers(){
     LinkedList<Timer*>* timerList = new LinkedList<Timer*>();
-    timerList->add(new Timer(19, 50, 20, 20, 0, new Condition0()));
-    timerList->add(new Timer(8, 00, 8, 30, 0, new Condition0()));
-    timerList->add(new Timer(10, 00, 10, 15, 0, new Condition0()));
+    timerList->add(new Timer(19, 50, 20, 20, 0, conditions[0]));
+    timerList->add(new Timer(8, 00, 8, 30, 0, conditions[0]));
+    timerList->add(new Timer(10, 00, 10, 15, 0, conditions[0]));
     timerList->add(new Timer(0, 0, 24, 0, 1, conditions[1]));
     timerList->sort(compare); // order is only relevant for displaying timers
     return timerList;
@@ -404,7 +423,7 @@ void triggerCallbacks( uint32_t actualTime ){
     }
       
 
-  int num_pins = sizeof(pins)/sizeof(pins[0]);
+  int num_pins = 4;  //TODO
   Serial.printf("%d pin(s) configured\n", num_pins);
 
   for( uint act_pin = 0; act_pin<num_pins; act_pin++){
@@ -436,14 +455,18 @@ void triggerCallbacks( uint32_t actualTime ){
       Serial.println(" active");
       float humidity = getHumidity();
       float temperature = dht.readTemperature();
-      boolean activateCondition = condition->check(humidity, temperature); // check types
-      pin->requestState(LOW);
+      if( condition->check(humidity, temperature)){
+        pin->requestState(LOW);
+        Serial.print("Activate Pin #");
+        Serial.println(timer->pin);
+      }
     }   
   }
   for( uint act_pin = 0; act_pin<num_pins; act_pin++){
     Pin *pin=&pins[act_pin];
     pin->commitRequestedState();
   }
+  state.debugPrint();
 }
 
 void json_to_resource(DynamicJsonDocument jsonBody) {
