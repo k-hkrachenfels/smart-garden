@@ -66,60 +66,10 @@ class JsonMappable{
     virtual JsonObject toJson( JsonObject parent)=0;
 };
 
-// ------- Conditions -------------
-/**
- * Note: not yet used
- * 
- * Plan: each timer can be combined with condition
- * e.g. water on between 8:00 and 8:30 when condition humidity<20 holds
- * i.e. condition conbines sensor values.
- */
-class Condition : public JsonMappable {
-  private:
-  public:
-    virtual bool check(uint temp, uint humidity) =0;
-    virtual String description()=0;
-};
-
-class Condition0 : public Condition{
-    private:
-  public:
-    virtual bool check(uint temp, uint humidity){
-      return true;
-    }
-    virtual String description(){
-      return "always true";
-    }
-    
-    virtual JsonObject toJson(JsonObject parent){
-      JsonObject object = parent.createNestedObject("Condition0");
-      object["description"] = description();
-      return object;
-    };
-};
-
-class Condition1: public Condition{
-    private:
-  public:
-    virtual bool check(uint temp, uint humidity){
-      return temp>5 && humidity<10;
-    }
-    virtual String description(){
-      return "temp>x && humidity<y";
-    }
-    virtual JsonObject toJson(JsonObject parent){
-      JsonObject object = parent.createNestedObject("Condition1");
-      object["description"] = description();
-      object["x"]=5;
-      object["y"]=10;
-      return object;
-    };
-};
-
 
 // ------- Pins -------------
 // a digital output pin
-class Pin{
+class Pin: public JsonMappable{
   private:
     int pin;
     int state;
@@ -156,11 +106,128 @@ class Pin{
         Serial.println("invalid state"); // TODO: errorhandling
       }
     }
+    virtual JsonObject toJson(JsonObject parent){
+      //JsonObject object = parent.createNestedObject("Pin");
+      parent["Pin_"] = pin;
+      parent["State"]= state;
+      return parent;
+    };
 };
 
-Pin pins[] = {Pin(D0, HIGH), Pin(D1,HIGH)};
+//Pin pins[] = {Pin(D0, HIGH), Pin(D1,HIGH)};
+class State: public JsonMappable {
+  private:
+    boolean autoMode=true; 
+    Pin pins[4]= {Pin(D0, HIGH), Pin(D1,HIGH),Pin(D2, HIGH), Pin(D3,HIGH)};
+  public:
+    virtual JsonObject toJson(JsonObject parent){
+      parent["autoMode"]=autoMode;
+      JsonArray jsonpins = parent.createNestedArray("Pins");
+      for (int i = 0; i < sizeof(pins)/sizeof(pins[0]); i++) {
+        Serial.println("Pin #");
+        Serial.println(i);
+        JsonObject jsonpin = jsonpins.createNestedObject();
+        jsonpin["Id"]=i;
+        pins[i].toJson(jsonpin);
+      }
+      return parent;  //todo: does return make sense at all?
+    };
 
-Condition *conditions[] = {new Condition0(), new Condition1()};
+    Pin *getPins(){
+      return pins;
+    }
+
+    void setMode( boolean modePar){
+      autoMode=modePar;
+    }
+    boolean isAutoMode(){
+      return autoMode;
+    }
+};
+State state = State();
+Pin *pins = state.getPins();
+
+// ------- Conditions -------------
+/**
+ * Note: not yet used
+ * 
+ * Plan: each timer can be combined with condition
+ * e.g. water on between 8:00 and 8:30 when condition humidity<20 holds
+ * i.e. condition conbines sensor values.
+ */
+class Condition : public JsonMappable {
+  protected:
+    int triggerTemp=0;
+    int triggerHumidity=0;
+  public:
+    virtual bool check(uint temp, uint humidity) =0;
+    virtual String description()=0;
+    virtual void setTemp(int temp){
+      triggerTemp = temp;
+    };
+    virtual void setHumidity(int humidity){
+      triggerHumidity = humidity;
+    };
+    virtual JsonObject toJson(JsonObject parent){
+      parent["triggerTemp"] = triggerTemp;
+      parent["triggerHumidity"] = triggerHumidity;
+      return parent;
+    };
+};
+
+class Condition0 : public Condition{
+    private:
+  public:
+    virtual bool check(uint temp, uint humidity){
+      return true;
+    }
+    virtual String description(){
+      return "always true";
+    }
+    
+    virtual JsonObject toJson(JsonObject parent){
+      JsonObject object = parent.createNestedObject("Condition0");
+      Condition::toJson(object);
+      object["description"] = description();
+      return object;
+    };
+};
+
+class Condition1: public Condition{
+    private:
+  public:
+    virtual bool check(uint temp, uint humidity){
+      return temp>triggerTemp && humidity<triggerHumidity;
+    }
+    virtual String description(){
+      return "temp>triggerTemp && humidity<triggerHumidity";
+    }
+    virtual JsonObject toJson(JsonObject parent){
+      JsonObject object = parent.createNestedObject("Condition1");
+      Condition::toJson(object);
+      object["description"] = description();
+      return object;
+    };
+};
+
+class Condition2: public Condition{
+    private:
+  public:
+    virtual bool check(uint temp, uint humidity){
+      return humidity<triggerHumidity;
+    }
+    virtual String description(){
+      return "humidity<triggerHumidity";
+    }
+    virtual JsonObject toJson(JsonObject parent){
+      JsonObject object = parent.createNestedObject("Condition1");
+      Condition::toJson(object);
+      object["description"] = description();
+      return object;
+    };
+};
+
+Condition *conditions[] = {new Condition0(), new Condition1(), new Condition2()};
 
 // ------- SENSORS -------------
 const int AirValue = 850;   
@@ -173,38 +240,6 @@ float getHumidity(){
   else if(return_val<0)
     return_val=0;
   return return_val;
-}
-
-// ------- REST CALLS -------------
-void toggle_0(){
-  //ledState0 = !ledState0;
-  //digitalWrite(ledPin0, ledState0);
-  //server.send(200, "text/plain", "LED0 toggled");
-}
-void toggle_1(){
-  //ledState1 = !ledState1;
-  //digitalWrite(ledPin1, ledState1);
-  //server.send(200, "text/plain", "LED1 toggled");
-}
-void on_0(){
-  //ledState0 = HIGH;
-  //digitalWrite(ledPin0, ledState0);
-  //server.send(200, "text/plain", "LED0 HIGH");
-}
-void on_1(){
-  //ledState1 = HIGH;
-  //digitalWrite(ledPin1, ledState1);
-  //server.send(200, "text/plain", "LED1 HIGH");
-}
-void off_0(){
-  //ledState0 = LOW;
-  //digitalWrite(ledPin0, ledState0);
-  //server.send(200, "text/plain", "LED0 LOW");
-}
-void off_1(){
-  //ledState1 = LOW;
-  //digitalWrite(ledPin1, ledState1);
-  //server.send(200, "text/plain", "LED1 LOW");
 }
 
 /*****************************************************
@@ -274,8 +309,8 @@ class Timer : public JsonMappable {
       return condition;
     }
 
-    virtual JsonObject toJson(JsonObject parent){
-      JsonObject object = parent.createNestedObject("Timer");
+    virtual JsonObject toJson(JsonObject object){
+      //JsonObject object = parent.createNestedObject("Timer");
       object["start_hour"] = start_hour;
       object["start_minute"] = start_minute;
       object["end_hour"] = end_hour;
@@ -311,7 +346,7 @@ LinkedList<Timer*>* initTimers(){
     timerList->add(new Timer(19, 50, 20, 20, 0, new Condition0()));
     timerList->add(new Timer(8, 00, 8, 30, 0, new Condition0()));
     timerList->add(new Timer(10, 00, 10, 15, 0, new Condition0()));
-    timerList->add(new Timer(0, 0, 24, 0, 1, new Condition1()));
+    timerList->add(new Timer(0, 0, 24, 0, 1, conditions[1]));
     timerList->sort(compare); // order is only relevant for displaying timers
     return timerList;
 }
@@ -341,7 +376,6 @@ void timers(){
       JsonObject timer = timers.createNestedObject();
       t->toJson(timer);
     }
-    //serializeJsonPretty(doc,Serial); 
     String output;
     serializeJsonPretty(doc, output);
     Serial.println();
@@ -363,6 +397,12 @@ void triggerCallbacks( uint32_t actualTime ){
     Serial.print(actualHour);
     Serial.print(":");
     Serial.println(actualMinute);
+
+    if( !state.isAutoMode()){
+      Serial.println("manual Mode - timers deactivated");
+      return;
+    }
+      
 
   int num_pins = sizeof(pins)/sizeof(pins[0]);
   Serial.printf("%d pin(s) configured\n", num_pins);
@@ -438,8 +478,70 @@ void post_put_timer() {
 
 }
 
+void set_state(DynamicJsonDocument jsonBody) {
+    boolean mode = jsonBody["AutoMode"];
+    int pin0 = jsonBody["Pin0"];
+    int pin1 = jsonBody["Pin1"];
+    int pin2 = jsonBody["Pin2"];
+    int pin3 = jsonBody["Pin3"];
+    state.setMode(mode);
+    pins=state.getPins();
+    pins[0].setState(pin0);
+    pins[1].setState(pin1);
+    pins[2].setState(pin2);
+    pins[3].setState(pin3); 
+}
 
+void post_put_state() {
+    String post_body = server.arg("plain");
+    Serial.print("body=");
+    Serial.println(post_body);
 
+    // Deserialize the JSON document
+    DeserializationError error = deserializeJson(jsonBody, post_body);
+  
+    // Test if parsing succeeds.
+    if (error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.c_str());
+      server.send(400);
+      return;
+    }
+ 
+    set_state(jsonBody);
+    server.send(200,"text/plain","state set");
+
+}
+
+void set_condition(DynamicJsonDocument jsonBody) {
+    int humidity = jsonBody["humidity"];
+    int condition_id = jsonBody["condition"];
+    int temp = jsonBody["temp"];
+    Condition *condition = conditions[condition_id];
+    condition->setHumidity(humidity);
+    condition->setTemp(temp);
+}
+
+void post_put_condition() {
+    String post_body = server.arg("plain");
+    Serial.print("body=");
+    Serial.println(post_body);
+
+    // Deserialize the JSON document
+    DeserializationError error = deserializeJson(jsonBody, post_body);
+  
+    // Test if parsing succeeds.
+    if (error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.c_str());
+      server.send(400);
+      return;
+    }
+ 
+    set_condition(jsonBody);
+    server.send(200,"text/plain","condition set");
+
+}
 void delete_from_json(DynamicJsonDocument jsonBody) {
     uint id = jsonBody["id"];
     deleteTimer(id);
@@ -461,6 +563,17 @@ void delete_timer() {
  
     delete_from_json(jsonBody);
     server.send(200,"text/plain","deleted Timer");
+
+}
+
+void get_state() {
+    JsonObject root = doc.to<JsonObject>();
+    state.toJson(root);
+    String output;
+    serializeJsonPretty(doc, output);
+    Serial.println();
+    serializeJsonPretty(doc, Serial);
+    server.send(200,"text/json",output);
 
 }
 
@@ -586,17 +699,15 @@ void setup() {
   }
   
   // register handlers
-  server.on("/toggle1", toggle_1);
-  server.on("/on1", on_1);
-  server.on("/off1", off_1);
-  server.on("/toggle0", toggle_0);
-  server.on("/on0", on_0);
-  server.on("/off0", off_0);
   server.on("/timers", timers);
   server.on("/sensors", readSensors);
   server.on("/timer", HTTP_POST, post_put_timer);
   server.on("/timer", HTTP_PUT, post_put_timer);
   server.on("/timer", HTTP_DELETE, delete_timer);
+  server.on("/state", HTTP_GET, get_state);
+  server.on("/state", HTTP_POST, post_put_state);
+  server.on("/state", HTTP_PUT, post_put_state);
+  server.on("/condition", HTTP_PUT, post_put_condition);
  
   // Start the server
   server.begin();
