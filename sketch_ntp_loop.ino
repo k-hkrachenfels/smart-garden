@@ -82,10 +82,6 @@ class Pin: public JsonMappable{
     void setState( int new_state){
       state = new_state;
       digitalWrite(pin, state);
-      Serial.print("Pin ");
-      Serial.print(pin);
-      Serial.print(" setting state ");
-      Serial.println(state);
     }
     int readState(){
       return state;
@@ -95,30 +91,12 @@ class Pin: public JsonMappable{
       digitalWrite(pin, state);
     }
     void requestState( uint requestMe){
-      Serial.print("Pin ");
-      Serial.print(pin);
-      Serial.print(" requesting state ");
-      Serial.println(requestMe);
       requestedState = requestMe;
     }
     void commitRequestedState(){
-      Serial.print("Pin ");
-      Serial.print(pin);
-      Serial.print(" setting state ");
-      Serial.println(requestedState);
       setState( requestedState );
     }
-    void toggleState(){
-      if(state==HIGH){
-        setState(LOW);
-      } else if(state==LOW){
-        setState(HIGH);
-      } else  {
-        Serial.println("invalid state"); // TODO: errorhandling
-      }
-    }
     virtual JsonObject toJson(JsonObject parent){
-      //JsonObject object = parent.createNestedObject("Pin");
       parent["Pin_"] = pin;
       parent["State"]= state;
       return parent;
@@ -178,7 +156,9 @@ class Condition : public JsonMappable {
   protected:
     int triggerTemp=0;
     int triggerHumidity=0;
+    virtual String type()=0;
   public:
+    Condition( int temp=20, int humidity=50):triggerTemp(temp), triggerHumidity(humidity){}
     virtual bool check(uint temp, uint humidity) =0;
     virtual String description()=0;
     virtual void setTemp(int temp){
@@ -188,14 +168,20 @@ class Condition : public JsonMappable {
       triggerHumidity = humidity;
     };
     virtual JsonObject toJson(JsonObject parent){
+      parent["type"]=type();
       parent["triggerTemp"] = triggerTemp;
       parent["triggerHumidity"] = triggerHumidity;
+      parent["description"]=description();
       return parent;
     };
 };
 
-class Condition0 : public Condition{
+class ConditionAllwaysTrue : public Condition{
     private:
+  protected:
+    virtual String type(){ 
+      return "ConditionAllwaysTrue";
+    };
   public:
     virtual bool check(uint temp, uint humidity){
       return true;
@@ -203,50 +189,71 @@ class Condition0 : public Condition{
     virtual String description(){
       return "always true";
     }
-    
-    virtual JsonObject toJson(JsonObject parent){
-      JsonObject object = parent.createNestedObject("Condition0");
-      Condition::toJson(object);
-      object["description"] = description();
-      return object;
-    };
 };
 
-class Condition1: public Condition{
+class ConditionTempAndHumidity: public Condition{
     private:
+  protected:
+    virtual String type(){ 
+      return "ConditionTempAndHumidity";
+    };
   public:
+    ConditionTempAndHumidity(int temp, int humidity){
+      triggerTemp = temp;
+      triggerHumidity = humidity;
+    }
     virtual bool check(uint temp, uint humidity){
       return temp>triggerTemp && humidity<triggerHumidity;
     }
     virtual String description(){
       return "temp>triggerTemp && humidity<triggerHumidity";
     }
-    virtual JsonObject toJson(JsonObject parent){
-      JsonObject object = parent.createNestedObject("Condition1");
-      Condition::toJson(object);
-      object["description"] = description();
-      return object;
-    };
 };
 
-class Condition2: public Condition{
-    private:
+class ConditionHumidity: public Condition{
+  protected:
+    virtual String type(){ 
+      return "ConditionHumidity";
+    };
   public:
+    ConditionHumidity(int humidity){
+      triggerHumidity = humidity;
+    }
     virtual bool check(uint temp, uint humidity){
       return humidity<triggerHumidity;
     }
     virtual String description(){
       return "humidity<triggerHumidity";
     }
-    virtual JsonObject toJson(JsonObject parent){
-      JsonObject object = parent.createNestedObject("Condition1");
-      Condition::toJson(object);
-      object["description"] = description();
-      return object;
-    };
 };
 
-Condition *conditions[] = {new Condition0(), new Condition1(), new Condition2()};
+class ConditionTemp: public Condition{
+  protected:
+    virtual String type(){ 
+      return "ConditionTemp";
+    };
+  public:
+    ConditionTemp(int temp){
+      triggerTemp = temp;
+    }
+    virtual bool check(uint temp, uint humidity){
+      return temp>triggerTemp;
+    }
+    virtual String description(){
+      return "temp>triggerTemp";
+    }
+};
+
+Condition *conditions[] = { new ConditionAllwaysTrue(),
+                            new ConditionTempAndHumidity(15,50), 
+                            new ConditionTempAndHumidity(20,50), 
+                            new ConditionHumidity(45), 
+                            new ConditionHumidity(50), 
+                            new ConditionHumidity(55), 
+                            new ConditionTemp(15),
+                            new ConditionTemp(20),
+                            new ConditionTemp(25)
+                          };
 
 // ------- SENSORS -------------
 const int AirValue = 850;   
@@ -286,6 +293,11 @@ void readSensors(){
  *****************************************************/
 class Timer : public JsonMappable {
   private:
+    int last_temp;
+    int last_humidity;
+    int current_state;
+    int active_now;
+
   public:
     uint start_hour;
     uint start_minute;
@@ -293,6 +305,7 @@ class Timer : public JsonMappable {
     uint end_minute;
     uint pin;
     Condition *condition;
+
     
     Timer(uint start_hour, uint start_minute, uint end_hour, uint end_minute, uint pin, Condition *condition) : 
           start_hour(start_hour), start_minute(start_minute), 
@@ -329,17 +342,26 @@ class Timer : public JsonMappable {
     }
 
     virtual JsonObject toJson(JsonObject object){
-      //JsonObject object = parent.createNestedObject("Timer");
       object["start_hour"] = start_hour;
       object["start_minute"] = start_minute;
       object["end_hour"] = end_hour;
       object["end_minute"] = end_minute;
       object["pin"] = pin;
+      object["lastTemp"] = last_temp;
+      object["lastHumidity"] = last_humidity;
+      object["activeNow"] = active_now;
+      object["currentState"] = current_state;
       Condition *condition = getCondition();
       condition->toJson(object); // return value not needed
       return object;
     };
-    
+
+    void set_humidity_temp_state_activeTime( int humidity, int temp, int state, int activeNow){
+      last_humidity = humidity;
+      last_temp = temp;
+      current_state = state;
+      active_now = activeNow;
+    }
 };
 
 int compare(Timer *&a, Timer *&b);
@@ -403,6 +425,23 @@ void timers(){
 
 }
 
+
+void get_conditions(){
+    JsonObject root = doc.to<JsonObject>();
+    JsonArray jsonconditions = root.createNestedArray("Conditions");
+    for (int i = 0; i < sizeof(conditions)/sizeof(conditions[0]); i++) {
+      Condition *c = conditions[i];
+      JsonObject jsonConditions = jsonconditions.createNestedObject();
+      jsonConditions["id"]=i;
+      c->toJson(jsonConditions);
+    }
+    String output;
+    serializeJsonPretty(doc, output);
+    Serial.println();
+    serializeJsonPretty(doc, Serial);
+    server.send(200,"text/json",output);
+
+}
 /*****************************************************
  * execute Timer callbacks in 
  * will be executed in fixed intervals e.g. every 
@@ -449,16 +488,21 @@ void triggerCallbacks( uint32_t actualTime ){
     Condition *condition = timer->getCondition();
     if(timer->isBeforeStartTime(actualHour, actualMinute) ){
       Serial.println(" not yet reached");
+      timer->set_humidity_temp_state_activeTime( 0, 0, 0, 0);
     } else if(timer->isAfterEndTime(actualHour, actualMinute) ){
       Serial.println(" already passed");
+      timer->set_humidity_temp_state_activeTime( 0, 0, 0, 0);
     } else {
       Serial.println(" active");
       float humidity = getHumidity();
       float temperature = dht.readTemperature();
       if( condition->check(humidity, temperature)){
+        timer->set_humidity_temp_state_activeTime( humidity, temperature, 1, 1);
         pin->requestState(LOW);
         Serial.print("Activate Pin #");
         Serial.println(timer->pin);
+      } else {
+        timer->set_humidity_temp_state_activeTime( humidity, temperature, 0, 1);
       }
     }   
   }
@@ -731,6 +775,7 @@ void setup() {
   server.on("/state", HTTP_POST, post_put_state);
   server.on("/state", HTTP_PUT, post_put_state);
   server.on("/condition", HTTP_PUT, post_put_condition);
+  server.on("/condition", HTTP_GET, get_conditions);
  
   // Start the server
   server.begin();
