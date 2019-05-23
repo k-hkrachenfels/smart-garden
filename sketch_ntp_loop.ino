@@ -81,6 +81,11 @@ class Pin: public JsonMappable{
     }
     void setState( int new_state){
       state = new_state;
+      Serial.print("digitalWriter(");
+      Serial.print(pin);
+      Serial.print(",");
+      Serial.print(state);
+      Serial.println(")");
       digitalWrite(pin, state);
     }
     int readState(){
