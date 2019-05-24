@@ -211,7 +211,7 @@ class ConditionTempAndHumidity: public Condition{
       triggerHumidity = humidity;
     }
     virtual bool check(uint temp, uint humidity){
-      Serial.printf(" emp(%ud)>triggerTemp(%d) && humidity(%ud)<triggerHumidity(%d)\n",temp, triggerTemp, humidity, triggerHumidity);
+      Serial.printf(" temp(%ud)>triggerTemp(%d) && humidity(%ud)<triggerHumidity(%d)\n",temp, triggerTemp, humidity, triggerHumidity);
       return temp>triggerTemp && humidity<triggerHumidity;
     }
     virtual String description(){
@@ -505,7 +505,7 @@ void triggerCallbacks( uint32_t actualTime ){
       Serial.println(" active");
       float humidity = getHumidity();
       float temperature = dht.readTemperature();
-      if( condition->check(humidity, temperature)){
+      if( condition->check(temperature, humidity)){
         timer->set_humidity_temp_state_activeTime( humidity, temperature, 1, 1);
         pin->requestState(LOW);
         Serial.print("Activate Pin #");
