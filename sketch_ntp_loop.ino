@@ -92,6 +92,9 @@ class Pin: public JsonMappable{
       return state;
     }
     void activate(){
+      Serial.print("setup: pinMode(");
+      Serial.print(pin);
+      Serial.print(", OUTPUT)");
       pinMode(pin, OUTPUT);
       digitalWrite(pin, state);
     }
@@ -208,6 +211,7 @@ class ConditionTempAndHumidity: public Condition{
       triggerHumidity = humidity;
     }
     virtual bool check(uint temp, uint humidity){
+      Serial.printf(" emp(%ud)>triggerTemp(%d) && humidity(%ud)<triggerHumidity(%d)\n",temp, triggerTemp, humidity, triggerHumidity);
       return temp>triggerTemp && humidity<triggerHumidity;
     }
     virtual String description(){
@@ -404,7 +408,7 @@ void addTimer( uint start_hour, uint start_minute, uint end_hour, uint end_minut
 }
 
 void deleteTimer( uint index){
-  Timer *removeMe = timerList->remove(index);
+  Timer *removeMe = timerList->remove(index); // TODO: free Timer
 }
 
 /*****************************************************
@@ -762,7 +766,7 @@ void setup() {
   // init output pins
   //pinMode(D0, OUTPUT);
   //digitalWrite(ledPin0, ledState0);
-  int num_pins = sizeof(pins)/sizeof(pins[0]);
+  int num_pins = 4;  //TODO
   Serial.printf("%d pin(s) configured\n", num_pins);
 
   for( uint act_pin = 0; act_pin<num_pins; act_pin++){
