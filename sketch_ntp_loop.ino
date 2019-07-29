@@ -45,7 +45,10 @@ int readAnalogPin( int pinNum) {
   digitalWrite(s0,s0_val);
   digitalWrite(s1,s1_val);
   digitalWrite(s2,s2_val);
-
+  
+  Serial.print("D6: ");
+  Serial.println(D6);
+  
   Serial.print(s2_val);
   Serial.print(s1_val);
   Serial.println(s0_val);
@@ -356,12 +359,12 @@ class Timer : public JsonMappable {
       object["end_hour"] = end_hour;
       object["end_minute"] = end_minute;
       object["pin"] = pin;
-      object["lastTemp"] = last_temp;
-      object["lastHumidity"] = last_humidity;
-      object["activeNow"] = active_now;
-      object["currentState"] = current_state;
-      Condition *condition = getCondition();
-      condition->toJson(object); // return value not needed
+      //object["lastTemp"] = last_temp;
+      //object["lastHumidity"] = last_humidity;
+      //object["activeNow"] = active_now;
+      //object["currentState"] = current_state;
+      //Condition *condition = getCondition();
+      //condition->toJson(object); // return value not needed
       return object;
     };
 
@@ -393,10 +396,17 @@ LinkedList<Timer*> *timerList = NULL;
  *****************************************************/
 LinkedList<Timer*>* initTimers(){
     LinkedList<Timer*>* timerList = new LinkedList<Timer*>();
-    timerList->add(new Timer(19, 50, 20, 20, 0, conditions[0]));
-    timerList->add(new Timer(8, 00, 8, 30, 0, conditions[0]));
-    timerList->add(new Timer(10, 00, 10, 15, 0, conditions[0]));
-    timerList->add(new Timer(0, 0, 24, 0, 1, conditions[1]));
+
+    
+    timerList->add(new Timer(4, 10, 4, 14, 0, conditions[0]));
+    timerList->add(new Timer(4, 20, 4, 23, 1, conditions[0]));
+    timerList->add(new Timer(4, 30, 4, 33, 2, conditions[0]));
+    timerList->add(new Timer(4, 40, 4, 43, 3, conditions[0]));
+
+    timerList->add(new Timer(13, 20, 13, 22, 0, conditions[0]));
+    timerList->add(new Timer(13, 22, 13, 24, 1, conditions[0]));
+    timerList->add(new Timer(13, 24, 13, 26, 2, conditions[0]));
+    timerList->add(new Timer(13, 26, 13, 28, 3, conditions[0]));
     timerList->sort(compare); // order is only relevant for displaying timers
     return timerList;
 }
@@ -415,7 +425,8 @@ void deleteTimer( uint index){
  * REST call to query timers
  *****************************************************/
 
-StaticJsonDocument<2048> doc;
+//StaticJsonDocument<2048> doc;
+DynamicJsonDocument doc(10000);
 void timers(){
     //DynamicJsonDocument doc(1024);
     
@@ -532,7 +543,7 @@ void json_to_resource(DynamicJsonDocument jsonBody) {
     addTimer(start_hour, start_minute, end_hour, end_minute, pin, condition);
 }
 
-DynamicJsonDocument jsonBody(1000); // avoid mem leaks
+DynamicJsonDocument jsonBody(2048); // avoid mem leaks
 void post_put_timer() {
     String post_body = server.arg("plain");
     Serial.print("body=");
@@ -720,7 +731,10 @@ void startWiFi() {
     delay(250);
     Serial.print('.');
   }
-  
+
+  Serial.print("MAC ADDRESS: ");
+  Serial.print(WiFi.macAddress());
+  Serial.println();
   WiFi.hostname("ESP2"); // TODO - table with mac addresses and host-names here to get
                          // static ip addresses
 
@@ -797,6 +811,17 @@ void setup() {
   Serial.println(timeServerIP);
   Serial.println("\r\nSending NTP request ...");
   sendNTPpacket(timeServerIP);  
+
+  Serial.print("A0: ");
+  Serial.println(A0);
+
+  Serial.print("D6: ");
+  Serial.println(D6);
+  Serial.print("D7: ");
+  Serial.println(D7);
+  Serial.print("D8: ");
+  Serial.println(D8);
+  
 }
 
 uint32_t lastTriggerTime=0;
