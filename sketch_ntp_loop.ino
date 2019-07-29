@@ -84,11 +84,6 @@ class Pin: public JsonMappable{
     }
     void setState( int new_state){
       state = new_state;
-      Serial.print("digitalWriter(");
-      Serial.print(pin);
-      Serial.print(",");
-      Serial.print(state);
-      Serial.println(")");
       digitalWrite(pin, state);
     }
     int readState(){
@@ -124,8 +119,6 @@ class State: public JsonMappable {
       parent["autoMode"]=autoMode;
       JsonArray jsonpins = parent.createNestedArray("Pins");
       for (int i = 0; i < sizeof(pins)/sizeof(pins[0]); i++) {
-        Serial.println("Pin #");
-        Serial.println(i);
         JsonObject jsonpin = jsonpins.createNestedObject();
         jsonpin["Id"]=i;
         pins[i].toJson(jsonpin);
@@ -402,11 +395,15 @@ LinkedList<Timer*>* initTimers(){
     timerList->add(new Timer(4, 20, 4, 23, 1, conditions[0]));
     timerList->add(new Timer(4, 30, 4, 33, 2, conditions[0]));
     timerList->add(new Timer(4, 40, 4, 43, 3, conditions[0]));
+    timerList->sort(compare); // order is only relevant for displaying timers
+    return timerList;
+}
 
-    timerList->add(new Timer(13, 20, 13, 22, 0, conditions[0]));
-    timerList->add(new Timer(13, 22, 13, 24, 1, conditions[0]));
-    timerList->add(new Timer(13, 24, 13, 26, 2, conditions[0]));
-    timerList->add(new Timer(13, 26, 13, 28, 3, conditions[0]));
+LinkedList<Timer*>* initTimersVorgarten(){
+    LinkedList<Timer*>* timerList = new LinkedList<Timer*>();
+
+    timerList->add(new Timer(20, 0, 20, 10, 0, conditions[0]));
+    timerList->add(new Timer(7, 0, 7, 10, 0, conditions[0]));
     timerList->sort(compare); // order is only relevant for displaying timers
     return timerList;
 }
@@ -723,19 +720,50 @@ uint32_t updateTimes(){
 // ------------ LAN AND NETWORKING ------------
 
 void startWiFi() { 
+  //Static IP address configuration
+
+  IPAddress gateway(192, 168, 1, 2);   //IP Address of your WiFi Router (Gateway)
+  IPAddress subnet(255, 255, 255, 0);  //Subnet mask
+  IPAddress dns(8, 8, 8, 8);  //DNS
+  const char* deviceName = "circuits4you.com";
+  String vorgartenMac = "CC:50:E3:0A:1B:F2";
+  String currentMac = WiFi.macAddress();
+  if( currentMac.equals(vorgartenMac)){
+    timerList = initTimersVorgarten();
+    WiFi.hostname("esp-vorgarten"); 
+    IPAddress staticIP(192, 168, 1, 141); 
+    WiFi.config(staticIP, subnet, gateway, dns);
+  } else {
+    timerList = initTimers();
+    WiFi.hostname("esp-gewaechshaus"); 
+    IPAddress staticIP(192, 168, 1, 107);
+    WiFi.config(staticIP, subnet, gateway, dns);
+  }
+  
+  Serial.print("MAC ADDRESS comparison: ");
+
+  Serial.println();
+
+  Serial.print("MAC ADDRESS: ");
+  Serial.print(currentMac); 
+  Serial.println();
+    
   wifiMulti.addAP("dlink-4DA8", "31415926089612867501764661889901764662708917072004000000000");   
-  WiFi.hostname("ESP2"); // TODO - table with mac addresses and host-names here to get
-                         // static ip addresses
+
+
+  //WiFi.config(staticIP, subnet, gateway, dns);
+  
+
+
+  
   Serial.println("Connecting");
   while (wifiMulti.run() != WL_CONNECTED) {  
     delay(250);
     Serial.print('.');
   }
 
-  Serial.print("MAC ADDRESS: ");
-  Serial.print(WiFi.macAddress());
-  Serial.println();
-  WiFi.hostname("ESP2"); // TODO - table with mac addresses and host-names here to get
+
+  //WiFi.hostname("ESP2"); // TODO - table with mac addresses and host-names here to get
                          // static ip addresses
 
   Serial.println("\r\n");
@@ -767,7 +795,6 @@ void setup() {
   // init digital DHT11 sensor
   dht.begin();
   
-  timerList = initTimers();
   startWiFi();                   
   startUDP();
 
@@ -777,9 +804,6 @@ void setup() {
     ESP.reset();
   }
 
-  // init output pins
-  //pinMode(D0, OUTPUT);
-  //digitalWrite(ledPin0, ledState0);
   int num_pins = 4;  //TODO
   Serial.printf("%d pin(s) configured\n", num_pins);
 
@@ -812,15 +836,6 @@ void setup() {
   Serial.println("\r\nSending NTP request ...");
   sendNTPpacket(timeServerIP);  
 
-  Serial.print("A0: ");
-  Serial.println(A0);
-
-  Serial.print("D6: ");
-  Serial.println(D6);
-  Serial.print("D7: ");
-  Serial.println(D7);
-  Serial.print("D8: ");
-  Serial.println(D8);
   
 }
 
