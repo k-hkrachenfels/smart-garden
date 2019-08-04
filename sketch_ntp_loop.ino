@@ -6,6 +6,22 @@
 #include <LinkedList.h>
 #include <DHT.h>
 
+//use ESpressif SDK for api to set of mac address
+extern "C" {
+  #include <user_interface.h>
+}
+
+void setVorgartenMacAddress(){
+  uint8_t mac[6] {0xCC, 0x50, 0xE3, 0x0A, 0x1B, 0xF2};     
+  wifi_set_macaddr(0, const_cast<uint8*>(mac));    
+}
+
+void setGewaechshausMacAddress(){
+  uint8_t mac[6] {0xCC, 0x50, 0xE3, 0x0A, 0x1F, 0x9E};     
+  wifi_set_macaddr(0, const_cast<uint8*>(mac));    
+}
+ 
+
 ESP8266WebServer server(80);
 const int humidityPin = A0; // -> replace
 const int analogPin = A0;
@@ -13,7 +29,7 @@ DHT dht(D4,DHT11);
 
 ESP8266WiFiMulti wifiMulti;      
 WiFiUDP UDP;                     
-IPAddress timeServerIP;          
+IPAddress timeServerIP(192,53,103,108);       
 const char* NTPServerName = "ptbtime1.ptb.de";
 const int NTP_PACKET_SIZE = 48;  
 byte NTPBuffer[NTP_PACKET_SIZE]; 
@@ -387,14 +403,14 @@ LinkedList<Timer*> *timerList = NULL;
 /*****************************************************
  * proc to init Timers by filling list
  *****************************************************/
-LinkedList<Timer*>* initTimers(){
+LinkedList<Timer*>* initTimersGewaechshaus(){
     LinkedList<Timer*>* timerList = new LinkedList<Timer*>();
 
     
-    timerList->add(new Timer(4, 10, 4, 14, 0, conditions[0]));
-    timerList->add(new Timer(4, 20, 4, 23, 1, conditions[0]));
-    timerList->add(new Timer(4, 30, 4, 33, 2, conditions[0]));
-    timerList->add(new Timer(4, 40, 4, 43, 3, conditions[0]));
+    timerList->add(new Timer(4, 10, 4, 16, 0, conditions[0]));
+    timerList->add(new Timer(4, 20, 4, 25, 1, conditions[0]));
+    timerList->add(new Timer(4, 30, 4, 35, 2, conditions[0]));
+    timerList->add(new Timer(4, 40, 4, 45, 3, conditions[0]));
     timerList->sort(compare); // order is only relevant for displaying timers
     return timerList;
 }
@@ -483,6 +499,9 @@ void triggerCallbacks( uint32_t actualTime ){
   Serial.printf("%d pin(s) configured\n", num_pins);
 
   for( uint act_pin = 0; act_pin<num_pins; act_pin++){
+    Serial.print("setting pin ");
+    Serial.print(act_pin);
+    Serial.println();
     Pin *pin=&pins[act_pin];
     pin->requestState(HIGH);
   }
@@ -720,56 +739,41 @@ uint32_t updateTimes(){
 // ------------ LAN AND NETWORKING ------------
 
 void startWiFi() { 
-  //Static IP address configuration
-
-  IPAddress gateway(192, 168, 1, 2);   //IP Address of your WiFi Router (Gateway)
-  IPAddress subnet(255, 255, 255, 0);  //Subnet mask
-  IPAddress dns(8, 8, 8, 8);  //DNS
-  const char* deviceName = "circuits4you.com";
+  IPAddress gateway(192, 168, 1, 2);   
+  IPAddress subnet(255, 255, 255, 0);  
+  IPAddress dns(8, 8, 8, 8);  
   String vorgartenMac = "CC:50:E3:0A:1B:F2";
+  String gewaechshausMac ="CC:50:E3:0A:1F:9E";
+  //setVorgartenMacAddress();
+  setGewaechshausMacAddress();
   String currentMac = WiFi.macAddress();
   if( currentMac.equals(vorgartenMac)){
+    Serial.println("using config V O R G A R T E N");
     timerList = initTimersVorgarten();
     WiFi.hostname("esp-vorgarten"); 
     IPAddress staticIP(192, 168, 1, 141); 
     WiFi.config(staticIP, subnet, gateway, dns);
-  } else {
-    timerList = initTimers();
+  } else if(  currentMac.equals(gewaechshausMac)){
+    Serial.println("using config G E W A E C H S H A U S");
+    timerList = initTimersGewaechshaus();
     WiFi.hostname("esp-gewaechshaus"); 
-    IPAddress staticIP(192, 168, 1, 107);
+    IPAddress staticIP(192, 168, 1, 103);
     WiFi.config(staticIP, subnet, gateway, dns);
-  }
-  
-  Serial.print("MAC ADDRESS comparison: ");
-
-  Serial.println();
-
+  } else
+    Serial.println(" I N V A L I D   C O N F I G");
+    
   Serial.print("MAC ADDRESS: ");
   Serial.print(currentMac); 
   Serial.println();
-    
   wifiMulti.addAP("dlink-4DA8", "31415926089612867501764661889901764662708917072004000000000");   
-
-
-  //WiFi.config(staticIP, subnet, gateway, dns);
-  
-
-
-  
   Serial.println("Connecting");
   while (wifiMulti.run() != WL_CONNECTED) {  
     delay(250);
     Serial.print('.');
   }
-
-
-  //WiFi.hostname("ESP2"); // TODO - table with mac addresses and host-names here to get
-                         // static ip addresses
-
   Serial.println("\r\n");
   Serial.print("Connected to ");
-  Serial.println(WiFi.SSID());   
-            
+  Serial.println(WiFi.SSID());             
   Serial.print("IP address:\t");
   Serial.print(WiFi.localIP());           
   Serial.println("\r\n");
@@ -798,11 +802,11 @@ void setup() {
   startWiFi();                   
   startUDP();
 
-  if(!WiFi.hostByName(NTPServerName, timeServerIP)) { 
+  /*if(!WiFi.hostByName(NTPServerName, timeServerIP)) { 
     Serial.println("DNS lookup failed. Rebooting.");
     Serial.flush();
     ESP.reset();
-  }
+  }*/
 
   int num_pins = 4;  //TODO
   Serial.printf("%d pin(s) configured\n", num_pins);
@@ -835,8 +839,6 @@ void setup() {
   Serial.println(timeServerIP);
   Serial.println("\r\nSending NTP request ...");
   sendNTPpacket(timeServerIP);  
-
-  
 }
 
 uint32_t lastTriggerTime=0;
