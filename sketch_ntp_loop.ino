@@ -747,18 +747,20 @@ void startWiFi() {
   //setVorgartenMacAddress();
   setGewaechshausMacAddress();
   String currentMac = WiFi.macAddress();
+
+  // TODO: remove if
   if( currentMac.equals(vorgartenMac)){
     Serial.println("using config V O R G A R T E N");
     timerList = initTimersVorgarten();
     WiFi.hostname("esp-vorgarten"); 
     IPAddress staticIP(192, 168, 1, 141); 
-    WiFi.config(staticIP, subnet, gateway, dns);
+    WiFi.config(staticIP, gateway, subnet, dns);
   } else if(  currentMac.equals(gewaechshausMac)){
     Serial.println("using config G E W A E C H S H A U S");
     timerList = initTimersGewaechshaus();
     WiFi.hostname("esp-gewaechshaus"); 
-    IPAddress staticIP(192, 168, 1, 103);
-    WiFi.config(staticIP, subnet, gateway, dns);
+    IPAddress staticIP(192, 168, 1, 143);
+    WiFi.config(staticIP, gateway, subnet, dns);
   } else
     Serial.println(" I N V A L I D   C O N F I G");
     
